@@ -239,7 +239,7 @@ def circuit_to_unitary(circuit: Circuit) -> np.ndarray:
     result = g_last @ ... @ g_1. Assumes the circuit is non-empty.
     """
     # TODO: implement.
-    final_matrix = np.identity(circuit[0].shape[0],dtype="complex128")
+    final_matrix = np.identity(circuit[0].to_unitary().shape[0],dtype="complex128")
     for i in range(len(circuit)-1,-1,-1):
         final_matrix*=circuit[i].to_unitary()
     
@@ -261,12 +261,9 @@ def error_up_to_phase(a: np.ndarray, b: np.ndarray) -> float:
     <b, a> = sum conj(b_ij) a_ij, then compare. ~0 means equal up to global phase.
     """
     # TODO: implement.
-    b_a = np.sum(np.conj(b)*a)
-    b = b * b_a
-    
-    diff = b - a
-    norm = float(np.linalg.norm(diff))
-    return norm
+    overlap = np.sum(np.conj(b) * a)
+    phase = np.exp(-1j * np.angle(overlap))
+    return float(np.linalg.norm(a - b * phase))
 # ---------------------------------------------------------------------------
 # Stage 1: Unitary -> two-level unitaries (see cpp/src/TwoLevel.h)
 # ---------------------------------------------------------------------------
@@ -363,35 +360,22 @@ def decompose_unitary(u: np.ndarray) -> TwoLevels:
     Returns the sequence S with prod(S) @ u == I (i.e. prod(S) = u^dagger).
     """
     # TODO: implement.
-    current_u = u.copy()
-    n = current_u.shape[0]
-    sequence = []
-    
+    n = u.shape[0]
+    work = u.astype(rt.DTYPE).copy()
+    gates: TwoLevels = []
     for k in range(n - 1):
-        sub_col = current_u[k:, k]
-        sub_tls = decompose_vector(sub_col)
-        for tl in sub_tls:
-            tl.size = n
-            tl.level0 += k
-            tl.level1 += k
-            current_u = tl.to_unitary() @ current_u
-            sequence.append(tl)
-        
-    bottom_right_2x2 = current_u[n-2:n, n-2:n]
-
-    cancel_unitary = np.conj(bottom_right_2x2.T)
-    
-    if not np.allclose(cancel_unitary, np.eye(2)):
-        final_tl = TwoLevel()
-        final_tl.size = n
-        final_tl.level0 = n - 2
-        final_tl.level1 = n - 1
-        final_tl.unitary = cancel_unitary
-        
-        sequence.append(final_tl)
-        
-    return sequence
-
+        col = work[k:, k]
+        sub = decompose_vector(col)
+        sub = expand_twolevels(sub, n)
+        for tl in sub:
+            work = tl.to_unitary() @ work
+            gates.append(tl)
+    # last entry residual phase
+    phase = work[n - 1, n - 1]
+    if abs(abs(phase) - 1.0) > 1e-12 or abs(np.angle(phase)) > 1e-12:
+        g = np.array([[np.conj(phase), 0], [0, phase]], dtype=rt.DTYPE)
+        gates.append(TwoLevel(n, n - 2, n - 1, g))
+    return gates
 
 def twolevel_decomposition(u: np.ndarray) -> TwoLevels:
     """The two-level decomposition of u itself: decompose_unitary returns the
@@ -464,37 +448,17 @@ def gray_code(tl: TwoLevel) -> list[Swap]:
     the other qubits (the control pattern).
     """
     # TODO: implement.
-    level0 = tl.level0
-    level1 = tl.level1
     n = num_qubits(tl.size)
-    list1 = np.zeros(2**n,dtype=bool)
-    list2 = np.zeros(2**n,dtype=bool)
-    list3 = []
-    i = 0
-    while level0!=0 :
-        if level0 % 2 != 0:
-            list1[i] = True
-        level0 = level0//2
-        i+=1
-    i = 0
-    while level1!=0 :
-        if level1 % 2 != 0:
-            list2[i] = True
-        level1 = level1//2
-        i+=1
-    
-    list1 = list1[::-1]
-    list2 = list2[::-1]
-    for i in range(0,len(list1)):
-        if list1[i] == list2[i]:
-            pass
-        else:
-            list1[i]=list2[i]
-            Swap1 = Swap()
-            Swap1.target = i 
-            Swap.control_vals = list1
-            list3.append(Swap1)
-    return list3
+    a, b = tl.level0, tl.level1
+    cur = a
+    swaps: list[Swap] = []
+    diff = a ^ b
+    bits = [q for q in range(n) if diff & (1 << q)]
+    for q in bits:
+        cur ^= 1 << q
+        vals = [(cur >> qq) & 1 == 1 for qq in range(n)]
+        swaps.append(Swap(target=q, control_vals=vals))
+    return swaps
 
 X = np.array([[0,1],[1,0]])
 def decompose_swap(swap: Swap) -> Circuit:
@@ -502,7 +466,8 @@ def decompose_swap(swap: Swap) -> Circuit:
     the swap's arbitrary control values.
     """
     # TODO: implement (hint: controlled_circuit with Pauli-X).
-    return controlled_circuit(swap.n, swap.target, swap.control_vals,X)
+    n = len(swap.control_vals)
+    return controlled_circuit(n, swap.target, swap.control_vals,X)
     
 
 def controlled_circuit(
@@ -514,16 +479,9 @@ def controlled_circuit(
     become 1-controls. The sandwich is symmetric (X is its own inverse).
     """
     # TODO: implement.
-    circuit = []
-    x_flips = []
-    
-    for q in range(n):
-        if q != target and not control_vals[q]:
-            x_flips.append(SingleQubitGate(n=n, target=q, unitary=X))
-            
-    circuit.extend(x_flips)
-    circuit.append(ControlledU(n=n, target=target, unitary=unitary))
-    circuit.extend(x_flips)
+    circuit: Circuit = [SingleQubitGate(n, q, rt.X) for q in range(n) if q != target and not control_vals[q]]
+    circuit.append(ControlledU(n, target, unitary))
+    circuit += [SingleQubitGate(n, q, rt.X) for q in range(n) if q != target and not control_vals[q]]
     return circuit
 
 
@@ -539,34 +497,47 @@ def decompose_twolevel(tl: TwoLevel) -> Circuit:
     the target value the second-to-last code has.
     """
     # TODO: implement using gray_code, decompose_swap, controlled_circuit.
-    circuit = []
-    
-    swaps = gray_code(tl.level0, tl.level1, tl.size) 
-    if not swaps:
-        return circuit
-    for swap in swaps[:-1]:
-        circuit.extend(decompose_swap(swap))
-        
-    last_swap = swaps[-1]
-    
-    target_bit_val = (tl.level0 >> last_swap.target) & 1
-    
-    oriented_unitary = tl.unitary
-    if target_bit_val == 1:
-        oriented_unitary = X @ tl.unitary @ X
-        
-    circuit.extend(controlled_circuit(
-        tl.size, 
-        last_swap.target, 
-        last_swap.control_vals, 
-        oriented_unitary
-    ))
-    
-    # 3. Undo the walk (reverse the initial swaps)
-    for swap in reversed(swaps[:-1]):
-        circuit.extend(decompose_swap(swap))
-        
-    return circuit
+    n = num_qubits(tl.size)
+    swaps = gray_code(tl)
+
+    walk = swaps[:-1]
+    last = swaps[-1]
+
+    forward: Circuit = []
+    for s in walk:
+        forward += decompose_swap(s)
+
+    oriented = _orient_twolevel(tl, swaps)
+    forward += controlled_circuit(
+        n, last.target, last.control_vals, oriented
+    )
+
+    backward: Circuit = []
+    for s in reversed(walk):
+        backward += decompose_swap(s)
+
+    return forward + backward
+
+
+def _orient_twolevel(tl: TwoLevel, swaps: list[Swap]) -> np.ndarray:
+    """Orient tl's 2x2 so its (0,0) corner lands on the basis state level0 reaches
+    just before the final adjacent transition (the second-to-last code).
+    """
+    U = tl.unitary
+    last = swaps[-1]
+    tbit = 1 << last.target
+    # basis state level0 sits at just before the last flip
+    if len(swaps) >= 2:
+        before_last = swaps[-2].control_vals
+        code = 0
+        for q in range(len(before_last)):
+            if before_last[q]:
+                code |= 1 << q
+    else:
+        code = tl.level0
+    if code & tbit:
+        return np.array([[U[1, 1], U[1, 0]], [U[0, 1], U[0, 0]]], dtype=rt.DTYPE)
+    return U.copy()
     
 
 
@@ -626,22 +597,27 @@ def decompose_cu(g: CU) -> Circuit:
     control=1: CNOTs act as X, target sees A X B X C = U with phase e^{i alpha}.
     """
     # TODO: implement using abc_decompose.
-    alpha, A, B, C = abc_decompose(g.unitary)
-    circuit = []
-    circuit.append(SingleQubitGate(n=g.n, target=g.target, unitary=C))
-    circuit.append(CNOT(n=g.n, control=g.control, target=g.target))
-    
-    circuit.append(SingleQubitGate(n=g.n, target=g.target, unitary=B))
-    
-    circuit.append(CNOT(n=g.n, control=g.control, target=g.target))
-    
-    circuit.append(SingleQubitGate(n=g.n, target=g.target, unitary=A))
-    
-    phase_gate = np.array([[1, 0], 
-                           [0, np.exp(1j * alpha)]], dtype=complex)
-    circuit.append(SingleQubitGate(n=g.n, target=g.control, unitary=phase_gate))
-    
+    n = g.n
+    ctl, tgt = g.control, g.target
+    d = abc_decompose(g.unitary)
+
+    phase = np.array([[1, 0], [0, np.exp(1j * d.alpha)]], dtype=rt.DTYPE)
+    circuit: Circuit = [
+        SingleQubitGate(n, tgt, d.C),
+        CNOT(n, ctl, tgt),
+        SingleQubitGate(n, tgt, d.B),
+        CNOT(n, ctl, tgt),
+        SingleQubitGate(n, tgt, d.A),
+        SingleQubitGate(n, ctl, phase),
+    ]
     return circuit
+
+
+def _rewrite(circuit: Circuit, rule) -> Circuit:
+    out: Circuit = []
+    for g in circuit:
+        out.extend(rule(g))
+    return out
 
 
 def decompose_to_basis(u: np.ndarray) -> Circuit:
@@ -654,27 +630,12 @@ def decompose_to_basis(u: np.ndarray) -> Circuit:
     Each stage rewrites only its own gate type and passes the rest through unchanged.
     """
     # TODO: implement (run each rewrite pass over the circuit).
-    stage1 = twolevel_decomposition(u)
-
-    stage2 = []
-    for gate in stage1:
-        stage2.extend(decompose_twolevel(gate))
-        
-    stage3 = []
-    for gate in stage2:
-        if isinstance(gate, ControlledU):
-            stage3.extend(decompose_controlledU(gate))
-        else:
-            stage3.append(gate)
-            
-    stage4 = []
-    for gate in stage3:
-        if isinstance(gate, CU):
-            stage4.extend(decompose_cu(gate))
-        else:
-            stage4.append(gate)
-            
-    return stage4
+    tls = twolevel_decomposition(u)
+    circuit = to_circuit(tls)
+    circuit = _rewrite(circuit, lambda g: decompose_twolevel(g) if isinstance(g, TwoLevel) else [g])
+    circuit = _rewrite(circuit, lambda g: decompose_controlledU(g) if isinstance(g, ControlledU) else [g])
+    circuit = _rewrite(circuit, lambda g: decompose_cu(g) if isinstance(g, CU) else [g])
+    return circuit
 
 
 def ht_gates(n: int, qubit: int, word: str) -> Circuit:
@@ -684,13 +645,10 @@ def ht_gates(n: int, qubit: int, word: str) -> Circuit:
     rotation.gates_to_unitary(word).
     """
     # TODO: implement.               
-    circuit = []
-    for char in reversed(word):
-        if char == 'H':
-            circuit.append(SingleQubitGate(n=n, target=qubit, unitary=rt.H))
-        elif char == 'T':
-            circuit.append(SingleQubitGate(n=n, target=qubit, unitary=rt.T))
-            
+    circuit: Circuit = []
+    for c in reversed(word):
+        U = rt.T if c == "T" else rt.H
+        circuit.append(SingleQubitGate(n, qubit, U))
     return circuit
 
 def decompose_to_ht(u: np.ndarray, error: float) -> Circuit:
@@ -704,13 +662,12 @@ def decompose_to_ht(u: np.ndarray, error: float) -> Circuit:
     """
     
     # TODO: implement using decompose_to_basis, ht_gates, and rotation.approximate_in_ht.
-    basis_circuit = decompose_to_basis(u)
-    final_circuit = []
-    
-    for gate in basis_circuit:
-        if isinstance(gate, SingleQubitGate):
-            word = rt.approximate_in_ht(gate.unitary, error)
-            final_circuit.extend(ht_gates(gate.n, gate.target, word))
+    circuit = decompose_to_basis(u)
+    out: Circuit = []
+    for g in circuit:
+        if isinstance(g, SingleQubitGate):
+            word = rt.approximate_in_ht(g.unitary, error)
+            out.extend(ht_gates(g.n, g.qubit, word))
         else:
-            final_circuit.append(gate)        
-    return final_circuit
+            out.append(g)
+    return out

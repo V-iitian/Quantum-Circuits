@@ -26,7 +26,6 @@ from typing import Union
 import numpy as np
 
 import rotation as rt 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -363,7 +362,7 @@ def decompose_unitary(u: np.ndarray) -> TwoLevels:
     Returns the sequence S with prod(S) @ u == I (i.e. prod(S) = u^dagger).
     """
     # TODO: implement.
-    raise NotImplementedError("decompose_unitary is not implemented yet")
+    
 
 
 def twolevel_decomposition(u: np.ndarray) -> TwoLevels:

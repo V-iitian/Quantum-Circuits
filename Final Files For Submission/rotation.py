@@ -282,13 +282,13 @@ def power_gates(base: str, k: int) -> str:
     """
     power_str = ""
     if k>0 :
-        while k>=0 :
+        while k>0:
             power_str += base
             k-=1
-    else:
+    elif k<0:
         k = -1*k
         base_inverted = base[::-1]
-        while k>=0 :
+        while k>0 :
             power_str += base_inverted
             k-=1
     
