@@ -252,7 +252,7 @@ T = unitary2_sqrt(unitary2_sqrt(Z))
 def gates_to_unitary(gates: str) -> np.ndarray:
     """The 2x2 unitary of a flat H/T gate string (left-to-right product)."""
     M = np.identity(2,dtype='complex128')
-    for char in str:
+    for char in gates:
         if char == 'H':
             M = M @ H
         else: 
