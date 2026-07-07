@@ -363,7 +363,34 @@ def decompose_unitary(u: np.ndarray) -> TwoLevels:
     Returns the sequence S with prod(S) @ u == I (i.e. prod(S) = u^dagger).
     """
     # TODO: implement.
-    raise NotImplementedError("decompose_unitary is not implemented yet")
+    current_u = u.copy()
+    n = current_u.shape[0]
+    sequence = []
+    
+    for k in range(n - 1):
+        sub_col = current_u[k:, k]
+        sub_tls = decompose_vector(sub_col)
+        for tl in sub_tls:
+            tl.size = n
+            tl.level0 += k
+            tl.level1 += k
+            current_u = tl.to_unitary() @ current_u
+            sequence.append(tl)
+        
+    bottom_right_2x2 = current_u[n-2:n, n-2:n]
+
+    cancel_unitary = np.conj(bottom_right_2x2.T)
+    
+    if not np.allclose(cancel_unitary, np.eye(2)):
+        final_tl = TwoLevel()
+        final_tl.size = n
+        final_tl.level0 = n - 2
+        final_tl.level1 = n - 1
+        final_tl.unitary = cancel_unitary
+        
+        sequence.append(final_tl)
+        
+    return sequence
 
 
 def twolevel_decomposition(u: np.ndarray) -> TwoLevels:
