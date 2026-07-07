@@ -285,20 +285,23 @@ def decompose_vector(vec: np.ndarray) -> TwoLevels:
     running pivot holds the accumulated real norm after the first rotation.
     """
     size = len(vec)
-    sequence : TwoLevels = []
-    for i in range(size-2,-1,-1):
-       A = TwoLevel()
-       A.size = size 
-       A.level0 = i 
-       A.level1 = i+1
-       norm = vec[i]*np.conj(vec[i])+vec[i+1]*np.conj(vec[i+1])
-       A.unitary = align(vec[i],vec[i+1],norm)
-       vec = A.to_unitary() @ vec
-       if np.isclose(vec[i],1.0):
-           vec[i] = 1.0 + 0j
-       if np.isclose(vec[i+1],0.0):
-           vec[i+1] = 0.0 + 0j
-       sequence.append(A)
+    sequence: TwoLevels = []
+    
+    for i in range(size - 2, -1, -1):
+        norm = np.linalg.norm([vec[i], vec[i+1]])
+        if norm < 1e-12:
+            continue
+            
+        A = TwoLevel(size=size, level0=i, level1=i+1, unitary=np.eye(2, dtype=complex))
+        
+        A.unitary = align(vec[i], vec[i+1], norm)
+        vec = A.to_unitary() @ vec
+        if np.isclose(vec[i], 1.0):
+            vec[i] = 1.0 + 0j
+        if np.isclose(vec[i+1], 0.0):
+            vec[i+1] = 0.0 + 0j
+            
+        sequence.append(A)
 
     return sequence
 
