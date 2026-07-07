@@ -25,7 +25,7 @@ from typing import Union
 
 import numpy as np
 
-import rotation
+import rotation as rt 
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -372,7 +372,9 @@ def twolevel_decomposition(u: np.ndarray) -> TwoLevels:
     the sequence whose product is u.
     """
     # TODO: implement (hint: adjoint_twolevels(decompose_unitary(u))).
-    raise NotImplementedError("twolevel_decomposition is not implemented yet")
+    sequence = decompose_unitary(u)
+    new_sequence = adjoint_twolevels(sequence)
+    return new_sequence
 
 
 # ---------------------------------------------------------------------------
@@ -402,15 +404,26 @@ def abc_decompose(u: np.ndarray) -> ABC:
     Using X Ry(t) X = Ry(-t) and X Rz(t) X = Rz(-t), these satisfy A B C = I and
     e^{i alpha} A X B X C = u.
     """
-    # TODO: implement using rotation.euler_angles_zyz, rotation.Rz/Ry.
-    raise NotImplementedError("abc_decompose is not implemented yet")
+    alpha , beta ,gamma , delta = rt.euler_angles_zyz(u)
+
+    A = rt.Rz(beta)*rt.Ry(gamma/2)
+    B = rt.Ry(-1*gamma/2)*rt.Rz(-(delta+beta)/2)
+    C = rt.Rz((delta-beta)/2)
+    ABC_rep = ABC()
+    ABC_rep.alpha = alpha
+    ABC_rep.A = A
+    ABC_rep.B = B
+    ABC_rep.C = C
+    return ABC_rep
+
 
 
 def abc_reconstruct(d: ABC) -> np.ndarray:
     """Reassemble e^{i alpha} A X B X C from an ABC (inverse of abc_decompose)."""
-    # TODO: implement.
-    raise NotImplementedError("abc_reconstruct is not implemented yet")
+    X = np.array([[0,1],[1,0]])
+    u = np.exp(1j*d.alpha)*(d.A @ X @ d.B @ X @ d.C)
 
+    return u
 
 # ---------------------------------------------------------------------------
 # Gray code and controlled circuits (see cpp/src/Swap.h, cpp/src/Circuit.h)
@@ -424,16 +437,44 @@ def gray_code(tl: TwoLevel) -> list[Swap]:
     the other qubits (the control pattern).
     """
     # TODO: implement.
-    raise NotImplementedError("gray_code is not implemented yet")
-
+    level0 = tl.level0
+    level1 = tl.level1
+    n = num_qubits(tl.size)
+    list1 = np.zeros(2**n,dtype=bool)
+    list2 = np.zeros(2**n,dtype=bool)
+    list3 = []
+    i = 0
+    while level0!=0 :
+        if level0 % 2 != 0:
+            list1[i] = True
+        level0 = level0//2
+        i+=1
+    i = 0
+    while level1!=0 :
+        if level1 % 2 != 0:
+            list2[i] = True
+        level1 = level1//2
+        i+=1
+    
+    list1 = list1[::-1]
+    list2 = list2[::-1]
+    for i in range(0,len(list1)):
+        if list1[i] == list2[i]:
+            pass
+        else:
+            list1[i]=list2[i]
+            Swap1 = Swap()
+            Swap1.target = i 
+            Swap.control_vals = list1
+            list3.append(Swap1)
+    return list3
 
 def decompose_swap(swap: Swap) -> Circuit:
     """Decompose a Swap (multi-controlled NOT) into a Circuit: a controlled-X with
     the swap's arbitrary control values.
     """
     # TODO: implement (hint: controlled_circuit with Pauli-X).
-    raise NotImplementedError("decompose_swap is not implemented yet")
-
+    
 
 def controlled_circuit(
     n: int, target: int, control_vals: list[bool], unitary: np.ndarray
@@ -459,7 +500,7 @@ def decompose_twolevel(tl: TwoLevel) -> Circuit:
     the target value the second-to-last code has.
     """
     # TODO: implement using gray_code, decompose_swap, controlled_circuit.
-    raise NotImplementedError("decompose_twolevel is not implemented yet")
+    
 
 
 def decompose_controlled(
