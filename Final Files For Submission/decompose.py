@@ -35,8 +35,10 @@ import rotation
 def num_qubits(N: int) -> int:
     """Number of qubits n such that N == 2^n (N is the unitary / two-level size)."""
     # TODO: implement.
-    raise NotImplementedError("num_qubits is not implemented yet")
-
+    i=0
+    while 2**i != N:
+        i+=1
+    return i
 
 # ---------------------------------------------------------------------------
 # Gate representations
@@ -59,12 +61,17 @@ class TwoLevel:
     unitary: np.ndarray  # (2, 2)
 
     def to_unitary(self) -> np.ndarray:
+        one = self.level0
+        two = self.level1
         """Expand to the full `size` x `size` matrix: identity except the 2x2 block
         placed at rows/cols (level0, level1).
         """
-        # TODO: implement.
-        raise NotImplementedError("TwoLevel.to_unitary is not implemented yet")
-
+        M = np.identity(self.size,dtype="complex128")
+        M[one,one]=self.unitary[0,0]
+        M[one,two]=self.unitary[0,1]
+        M[two,one]=self.unitary[1,0]
+        M[two,two]=self.unitary[1,1]
+        return M
 
 @dataclass
 class SingleQubitGate:
@@ -77,16 +84,43 @@ class SingleQubitGate:
     unitary: np.ndarray  # (2, 2)
 
     def to_unitary(self) -> np.ndarray:
-        """Expand the 2x2 to N dimensions: for each basis index whose `qubit` bit is
-        0, fill the 2x2 block linking it to its partner (that bit = 1).
-        """
-        # TODO: implement.
-        raise NotImplementedError("SingleQubitGate.to_unitary is not implemented yet")
+        """i was already aware of kronecker product so i used that directly """   
+        """ Method 1 """
+        # M = np.identity(2**self.n,dtype=int)
+        # for i in range(0,self.n):
+        #     if i==0:
+        #         if i == self.qubit :
+        #             temp = self.unitary
+        #         else:
+        #             temp = np.identity(2,dtype=int)
+        #     else:
+        #         if i == self.qubit:
+        #             temp = np.kron(temp,self.unitary)
+        #         else:
+        #             temp = np.kron(temp,np.identity(2,dtype=int))
+        #     if(i+1==self.n):
+        #         return temp
+        """Method 2 (Although its same under view of mathematics)"""
+        temp = np.identity(2**self.n,dtype="complex128")
+
+        diff = 2**(self.qubit-self.n-1)
+        index0=0
+        for i in range(0,2**(self.n-1)):
+            Two_lev = TwoLevel()
+            Two_lev.size = 2**self.n
+            Two_lev.index0 = index0
+            Two_lev.index1 = Two_lev.index0+diff
+            Two_lev.unitary = self.unitary
+            temp = temp * Two_lev.to_unitary()
+            
+
+
 
 
 @dataclass
 class ControlledU:
-    """A fully-controlled single-qubit gate C^k(U): apply the 2x2 `unitary` to
+    """
+    A fully-controlled single-qubit gate C^k(U): apply the 2x2 `unitary` to
     `target` iff every other qubit is 1. Controls are always conditioned on 1, so
     their positions need not be stored.
     """
@@ -101,7 +135,7 @@ class ControlledU:
         """
         # TODO: implement.
         raise NotImplementedError("ControlledU.to_unitary is not implemented yet")
-
+    
 
 @dataclass
 class CU:

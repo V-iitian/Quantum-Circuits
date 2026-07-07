@@ -230,38 +230,70 @@ M2_WORD = [2, 1, 1, 1, 6, 1, 7, 1, 5, 1, 1, 1, 2, 1, 1, 1, 2, 1, 7, 1, 6]
 
 
 def expand_word(word: list[int]) -> str:
-    """Flatten an alternating (T-power, H-power, ...) exponent list into a literal
-    string of 'H'/'T' gates (left-to-right). Even indices are T, odd indices are H.
-    """
-    # TODO: implement.
-    raise NotImplementedError("expand_word is not implemented yet")
-
+    expanded = ""
+    for count,words in enumerate(word):
+        if count % 2 == 0 :
+            while words!=0 : 
+                expanded += 'T'
+                words-=1
+        else :
+            while words!=0:
+                expanded+='H'
+                words-=1
+    return expanded
 
 # flat H/T strings for the two building-block words (computed once expand_word works)
-# M1_STR = expand_word(M1_WORD)
-# M2_STR = expand_word(M2_WORD)
+M1_STR = expand_word(M1_WORD)
+M2_STR = expand_word(M2_WORD)
 
-
+# T- Matrix 
+Z = np.array([[1,0],[0,-1]])
+T = unitary2_sqrt(unitary2_sqrt(Z))
 def gates_to_unitary(gates: str) -> np.ndarray:
     """The 2x2 unitary of a flat H/T gate string (left-to-right product)."""
-    # TODO: implement (multiply H / T for each char, starting from I).
-    raise NotImplementedError("gates_to_unitary is not implemented yet")
+    M = np.identity(2,dtype='complex128')
+    for char in str:
+        if char == 'H':
+            M = M @ H
+        else: 
+            M = M @ T
+    
+    return M
 
 
 def invert_gates(gates: str) -> str:
     """Inverse of a flat H/T word: reverse the gate order and invert each gate.
     H^-1 = H; the {H, T} basis has no T-dagger, so T^-1 must be spelled as T^7.
     """
-    # TODO: implement.
-    raise NotImplementedError("invert_gates is not implemented yet")
+    inverted_str = ""
+    i = len(gates)-1
+    while i>=0 :
+        if gates[i]=='H':
+            inverted_str+='H'
+        else:
+            inverted_str+='TTTTTTT'
+        i-=1
+    return inverted_str
 
 
 def power_gates(base: str, k: int) -> str:
     """The k-th power of a flat H/T word: base repeated k times. Negative k uses the
     inverse word (invert_gates).
     """
-    # TODO: implement.
-    raise NotImplementedError("power_gates is not implemented yet")
+    power_str = ""
+    if k>0 :
+        while k>=0 :
+            power_str += base
+            k-=1
+    else:
+        k = -1*k
+        base_inverted = base[::-1]
+        while k>=0 :
+            power_str += base_inverted
+            k-=1
+    
+    return power_str
+
 
 
 def approximate_in_ht(u: np.ndarray, error: float) -> str:
@@ -273,5 +305,6 @@ def approximate_in_ht(u: np.ndarray, error: float) -> str:
 
         power_gates(M1_STR, k) + power_gates(M2_STR, l) + power_gates(M1_STR, m).
     """
-    # TODO: implement using decompose_2x2 and power_gates.
-    raise NotImplementedError("approximate_in_ht is not implemented yet")
+    k,l,m = decompose_2x2(u,error)
+    final_word = power_gates(M1_STR,k)+power_gates(M2_STR,l)+power_gates(M1_STR,m)
+    return final_word
