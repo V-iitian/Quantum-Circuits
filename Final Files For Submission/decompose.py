@@ -239,13 +239,20 @@ def circuit_to_unitary(circuit: Circuit) -> np.ndarray:
     result = g_last @ ... @ g_1. Assumes the circuit is non-empty.
     """
     # TODO: implement.
-
+    final_matrix = np.identity(circuit[0].shape[0],dtype="complex128")
+    for i in range(len(circuit)-1,-1,-1):
+        final_matrix*=circuit[i].to_unitary()
+    
+    return final_matrix
 
 def to_circuit(two_levels: TwoLevels) -> Circuit:
     """Wrap a two-level sequence as a circuit, so decompose_unitary /
     twolevel_decomposition output flows straight into a Circuit.
     """
-    # TODO: implement.
+    myCircuit : Circuit = []
+    for two_lev in two_levels:
+        myCircuit.append(two_lev)
+    return myCircuit
 
 
 def error_up_to_phase(a: np.ndarray, b: np.ndarray) -> float:
@@ -254,8 +261,12 @@ def error_up_to_phase(a: np.ndarray, b: np.ndarray) -> float:
     <b, a> = sum conj(b_ij) a_ij, then compare. ~0 means equal up to global phase.
     """
     # TODO: implement.
-
-
+    b_a = np.sum(np.conj(b)*a)
+    b = b * b_a
+    
+    diff = b - a
+    norm = float(np.linalg.norm(diff))
+    return norm
 # ---------------------------------------------------------------------------
 # Stage 1: Unitary -> two-level unitaries (see cpp/src/TwoLevel.h)
 # ---------------------------------------------------------------------------
@@ -267,17 +278,32 @@ def align(x: complex, y: complex, norm: float) -> np.ndarray:
     level onto the first, leaving the real `norm` there and 0 below.
     """
     # TODO: implement.
-    raise NotImplementedError("align is not implemented yet")
-
+    Matrix = np.array([[np.conj(x),np.conj(y)],[-1*y , x]])/norm
+    return Matrix
 
 def decompose_vector(vec: np.ndarray) -> TwoLevels:
     """Given the first column of a unitary, return a sequence of two-levels which,
     when premultiplied onto the unitary, make its first column be (1, 0, 0, ...).
-    Walk from the bottom up, using `align` at each pivot to zero out one entry; the
+    Walk from the bottom to up, using `align` at each pivot to zero out one entry; the
     running pivot holds the accumulated real norm after the first rotation.
     """
-    # TODO: implement.
-    raise NotImplementedError("decompose_vector is not implemented yet")
+    size = len(vec)
+    sequence : TwoLevels = []
+    for i in range(size-2,-1,-1):
+       A = TwoLevel()
+       A.size = size 
+       A.level0 = i 
+       A.level1 = i+1
+       norm = vec[i]*np.conj(vec[i])+vec[i+1]*np.conj(vec[i+1])
+       A.unitary = align(vec[i],vec[i+1],norm)
+       vec = A.to_unitary() @ vec
+       if np.isclose(vec[i],1.0):
+           vec[i] = 1.0 + 0j
+       if np.isclose(vec[i+1],0.0):
+           vec[i+1] = 0.0 + 0j
+       sequence.append(A)
+
+    return sequence
 
 
 def expand_twolevels(input: TwoLevels, n: int) -> TwoLevels:
@@ -285,15 +311,23 @@ def expand_twolevels(input: TwoLevels, n: int) -> TwoLevels:
     the offset (n - tl.size). Used to lift a sub-block decomposition back to full n.
     """
     # TODO: implement.
-    raise NotImplementedError("expand_twolevels is not implemented yet")
+    for tl in input :
+        offset = n - tl.size
+        tl.size = n
+        tl.level0 +=offset
+        tl.level1 +=offset
+    return input 
 
 
 def two_levels_to_unitary(two_levels: TwoLevels) -> np.ndarray:
     """Full matrix of a two-level sequence: premultiply each two-level's matrix in
     order (result = tl.to_unitary() @ result), reproducing the application order.
     """
-    # TODO: implement.
-    raise NotImplementedError("two_levels_to_unitary is not implemented yet")
+    result = np.identity(two_levels[0].size,dtype="complex128")
+    for tl in two_levels:
+        result = tl.to_unitary() @ result
+
+    return result
 
 
 def adjoint_twolevel(tl: TwoLevel) -> TwoLevel:
@@ -301,15 +335,24 @@ def adjoint_twolevel(tl: TwoLevel) -> TwoLevel:
     the 2x2 block.
     """
     # TODO: implement.
-    raise NotImplementedError("adjoint_twolevel is not implemented yet")
+    """since other entries of final unitary is 1 and its updated idesntity matrix. 
+    Therefore, just updating the unitary matrix will suffice """
+    tl.unitary = np.transpose(np.conj(tl.unitary))
+
+    return tl
 
 
 def adjoint_twolevels(two_levels: TwoLevels) -> TwoLevels:
     """Adjoint of a sequence: reverse the order and take the adjoint of each, since
     (A_k ... A_1)^dagger = A_1^dagger ... A_k^dagger.
     """
-    # TODO: implement.
-    raise NotImplementedError("adjoint_twolevels is not implemented yet")
+    new_sequence : TwoLevels = []
+    for i in range(len(two_levels)-1,-1,-1):
+        two_levels[i] = adjoint_twolevel(two_levels[i])
+        new_sequence.append(two_levels[i])
+    
+    return new_sequence
+
 
 
 def decompose_unitary(u: np.ndarray) -> TwoLevels:
