@@ -469,13 +469,11 @@ def gray_code(tl: TwoLevel) -> list[Swap]:
             list3.append(Swap1)
     return list3
 
-X = np.array([[0,1],[1,0]])
 def decompose_swap(swap: Swap) -> Circuit:
     """Decompose a Swap (multi-controlled NOT) into a Circuit: a controlled-X with
     the swap's arbitrary control values.
     """
     # TODO: implement (hint: controlled_circuit with Pauli-X).
-    return controlled_circuit(swap.n, swap.target, swap.control_vals,X)
     
 
 def controlled_circuit(
@@ -487,17 +485,7 @@ def controlled_circuit(
     become 1-controls. The sandwich is symmetric (X is its own inverse).
     """
     # TODO: implement.
-    circuit = []
-    x_flips = []
-    
-    for q in range(n):
-        if q != target and not control_vals[q]:
-            x_flips.append(SingleQubitGate(n=n, target=q, unitary=X))
-            
-    circuit.extend(x_flips)
-    circuit.append(ControlledU(n=n, target=target, unitary=unitary))
-    circuit.extend(x_flips)
-    return circuit
+    raise NotImplementedError("controlled_circuit is not implemented yet")
 
 
 # ---------------------------------------------------------------------------
@@ -512,34 +500,6 @@ def decompose_twolevel(tl: TwoLevel) -> Circuit:
     the target value the second-to-last code has.
     """
     # TODO: implement using gray_code, decompose_swap, controlled_circuit.
-    circuit = []
-    
-    swaps = gray_code(tl.level0, tl.level1, tl.size) 
-    if not swaps:
-        return circuit
-    for swap in swaps[:-1]:
-        circuit.extend(decompose_swap(swap))
-        
-    last_swap = swaps[-1]
-    
-    target_bit_val = (tl.level0 >> last_swap.target) & 1
-    
-    oriented_unitary = tl.unitary
-    if target_bit_val == 1:
-        oriented_unitary = X @ tl.unitary @ X
-        
-    circuit.extend(controlled_circuit(
-        tl.size, 
-        last_swap.target, 
-        last_swap.control_vals, 
-        oriented_unitary
-    ))
-    
-    # 3. Undo the walk (reverse the initial swaps)
-    for swap in reversed(swaps[:-1]):
-        circuit.extend(decompose_swap(swap))
-        
-    return circuit
     
 
 
@@ -557,29 +517,7 @@ def decompose_controlled(
     Phases are kept throughout.
     """
     # TODO: implement (recursive; use rotation.unitary2_sqrt for V).
-    if len(controls) == 0:
-        return [SingleQubitGate(n=n, target=target, unitary=u)]
-    
-    if len(controls) == 1:
-        if np.allclose(u, X):
-            return [CNOT(n=n, control=controls[0], target=target)]
-        else:
-            return [CU(n=n, control=controls[0], target=target, unitary=u)]
-            
-    pivot = controls[-1]
-    rem_controls = controls[:-1]
-    
-    V = rt.unitary2_sqrt(u)
-    V_dag = np.conj(V.T)
-    
-    circuit = []
-    circuit.extend(decompose_controlled(n, [pivot], target, V))
-    circuit.extend(decompose_controlled(n, rem_controls, pivot, X))
-    circuit.extend(decompose_controlled(n, [pivot], target, V_dag))
-    circuit.extend(decompose_controlled(n, rem_controls, pivot, X))
-    circuit.extend(decompose_controlled(n, rem_controls, target, V))
-    
-    return circuit
+    raise NotImplementedError("decompose_controlled is not implemented yet")
 
 
 def decompose_controlledU(g: ControlledU) -> Circuit:
@@ -587,9 +525,8 @@ def decompose_controlledU(g: ControlledU) -> Circuit:
     the list of all non-target qubits as controls and call decompose_controlled.
     """
     # TODO: implement.
-    controls = [q for q in range(g.n) if q != g.target]
-    
-    return decompose_controlled(g.n, controls, g.target, g.unitary)
+    raise NotImplementedError("decompose_controlledU is not implemented yet")
+
 
 def decompose_cu(g: CU) -> Circuit:
     """Lower a singly-controlled C(U) into single-qubit gates + 2 CNOTs
@@ -599,22 +536,7 @@ def decompose_cu(g: CU) -> Circuit:
     control=1: CNOTs act as X, target sees A X B X C = U with phase e^{i alpha}.
     """
     # TODO: implement using abc_decompose.
-    alpha, A, B, C = abc_decompose(g.unitary)
-    circuit = []
-    circuit.append(SingleQubitGate(n=g.n, target=g.target, unitary=C))
-    circuit.append(CNOT(n=g.n, control=g.control, target=g.target))
-    
-    circuit.append(SingleQubitGate(n=g.n, target=g.target, unitary=B))
-    
-    circuit.append(CNOT(n=g.n, control=g.control, target=g.target))
-    
-    circuit.append(SingleQubitGate(n=g.n, target=g.target, unitary=A))
-    
-    phase_gate = np.array([[1, 0], 
-                           [0, np.exp(1j * alpha)]], dtype=complex)
-    circuit.append(SingleQubitGate(n=g.n, target=g.control, unitary=phase_gate))
-    
-    return circuit
+    raise NotImplementedError("decompose_cu is not implemented yet")
 
 
 def decompose_to_basis(u: np.ndarray) -> Circuit:
@@ -627,27 +549,7 @@ def decompose_to_basis(u: np.ndarray) -> Circuit:
     Each stage rewrites only its own gate type and passes the rest through unchanged.
     """
     # TODO: implement (run each rewrite pass over the circuit).
-    stage1 = twolevel_decomposition(u)
-
-    stage2 = []
-    for gate in stage1:
-        stage2.extend(decompose_twolevel(gate))
-        
-    stage3 = []
-    for gate in stage2:
-        if isinstance(gate, ControlledU):
-            stage3.extend(decompose_controlledU(gate))
-        else:
-            stage3.append(gate)
-            
-    stage4 = []
-    for gate in stage3:
-        if isinstance(gate, CU):
-            stage4.extend(decompose_cu(gate))
-        else:
-            stage4.append(gate)
-            
-    return stage4
+    raise NotImplementedError("decompose_to_basis is not implemented yet")
 
 
 def ht_gates(n: int, qubit: int, word: str) -> Circuit:
@@ -656,15 +558,9 @@ def ht_gates(n: int, qubit: int, word: str) -> Circuit:
     circuit's application order (first gate first = rightmost factor) reproduces
     rotation.gates_to_unitary(word).
     """
-    # TODO: implement.               
-    circuit = []
-    for char in reversed(word):
-        if char == 'H':
-            circuit.append(SingleQubitGate(n=n, target=qubit, unitary=rt.H))
-        elif char == 'T':
-            circuit.append(SingleQubitGate(n=n, target=qubit, unitary=rt.T))
-            
-    return circuit
+    # TODO: implement.
+    raise NotImplementedError("ht_gates is not implemented yet")
+
 
 def decompose_to_ht(u: np.ndarray, error: float) -> Circuit:
     """Fully lower a Unitary to a Circuit of only H, T, and CNOT gates (the discrete
@@ -675,15 +571,5 @@ def decompose_to_ht(u: np.ndarray, error: float) -> Circuit:
     factor out into one overall global phase, so the result reconstructs u up to
     global phase (compare with error_up_to_phase).
     """
-    
     # TODO: implement using decompose_to_basis, ht_gates, and rotation.approximate_in_ht.
-    basis_circuit = decompose_to_basis(u)
-    final_circuit = []
-    
-    for gate in basis_circuit:
-        if isinstance(gate, SingleQubitGate):
-            word = rt.approximate_in_ht(gate.unitary, error)
-            final_circuit.extend(ht_gates(gate.n, gate.target, word))
-        else:
-            final_circuit.append(gate)        
-    return final_circuit
+    raise NotImplementedError("decompose_to_ht is not implemented yet")
