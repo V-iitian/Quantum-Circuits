@@ -101,19 +101,29 @@ class SingleQubitGate:
         #     if(i+1==self.n):
         #         return temp
         """Method 2 (Although its same under view of mathematics)"""
-        temp = np.identity(2**self.n,dtype="complex128")
 
-        diff = 2**(self.qubit-self.n-1)
-        index0=0
-        for i in range(0,2**(self.n-1)):
-            Two_lev = TwoLevel()
-            Two_lev.size = 2**self.n
-            Two_lev.index0 = index0
-            Two_lev.index1 = Two_lev.index0+diff
-            Two_lev.unitary = self.unitary
-            temp = temp * Two_lev.to_unitary()
-            
 
+        """I wrote a very lengthy solution for this since i didn't have much experience of using bitmask so used ai for this part for a optimal solution"""
+
+        size = 2 ** self.n
+        target_qubit = self.qubit
+        final_matrix = np.zeros((size, size), dtype=complex)
+        gate_2x2 = self.unitary
+        
+        num_qubits = self.n
+        shift = num_qubits - 1 - target_qubit
+        mask = 1 << shift
+        for i in range(size):
+            if (i & mask) == 0:
+                
+                partner = i | mask
+                
+                final_matrix[i, i]             = gate_2x2[0, 0]
+                final_matrix[i, partner]       = gate_2x2[0, 1]
+                final_matrix[partner, i]       = gate_2x2[1, 0]
+                final_matrix[partner, partner] = gate_2x2[1, 1]
+                
+        return final_matrix
 
 
 
@@ -133,8 +143,17 @@ class ControlledU:
         """Identity everywhere except the single controlled block: the pair (all
         ones except the target bit, all ones).
         """
-        # TODO: implement.
-        raise NotImplementedError("ControlledU.to_unitary is not implemented yet")
+        index1 = 0
+        for i in range(0,self.n):
+            index1+=2**i
+        
+        Two_lev = TwoLevel()
+        Two_lev.size = 2 ** self.n
+        Two_lev.level0 = index1 - (2 **(self.n-self.target-1))
+        Two_lev.level1 = index1
+        Two_lev.unitary=self.unitary 
+        return Two_lev.to_unitary()
+        
     
 
 @dataclass
@@ -148,13 +167,28 @@ class CU:
     n: int
     control: int
     target: int
-    unitary: np.ndarray  # (2, 2)
+    unitary: np.ndarray 
 
     def to_unitary(self) -> np.ndarray:
         """Identity except the control=1 blocks, where `unitary` acts on `target`."""
-        # TODO: implement.
-        raise NotImplementedError("CU.to_unitary is not implemented yet")
 
+        # TODO: implement.
+        shift = self.n - 1 - self.target
+        shift2 = self.n-1-self.control
+        mask = 1 << shift
+        mask2 = 1 << shift2
+        gate_2x2 = self.unitary
+        final_matrix = np.identity(2**self.n,dtype="complex128")
+        for i in range(0,2**self.n):
+            # check if the control bit is zero or one :
+            if(i & mask2) != 0 :
+                if(i & mask) == 0:
+                    partner = i|mask
+                    final_matrix[i, i]             = gate_2x2[0, 0]
+                    final_matrix[i, partner]       = gate_2x2[0, 1]
+                    final_matrix[partner, i]       = gate_2x2[1, 0]
+                    final_matrix[partner, partner] = gate_2x2[1, 1]
+        return final_matrix
 
 @dataclass
 class CNOT:
@@ -167,18 +201,26 @@ class CNOT:
     target: int
 
     def to_unitary(self) -> np.ndarray:
-        """Identity except the control=1 blocks, where X swaps the target's 0/1
+        
+        """
+        Identity except the control=1 blocks, where X swaps the target's 0/1
         amplitudes.
         """
-        # TODO: implement.
-        raise NotImplementedError("CNOT.to_unitary is not implemented yet")
-
-
+        Cnot = CU()
+        Cnot.n = self.n
+        Cnot.control = self.control
+        Cnot.target = self.target
+        Cnot.unitary = np.array([[0,1],[1,0]])
+        return Cnot.to_unitary() 
+    
 @dataclass
 class Swap:
-    """A multi-controlled NOT (generalized Toffoli): flip `target` iff every other
+    """
+
+    A multi-controlled NOT (generalized Toffoli): flip `target` iff every other
     qubit equals its entry in `control_vals`. `control_vals` has size n and is
     indexed by qubit; control_vals[target] is unused.
+
     """
 
     target: int
@@ -197,7 +239,6 @@ def circuit_to_unitary(circuit: Circuit) -> np.ndarray:
     result = g_last @ ... @ g_1. Assumes the circuit is non-empty.
     """
     # TODO: implement.
-    raise NotImplementedError("circuit_to_unitary is not implemented yet")
 
 
 def to_circuit(two_levels: TwoLevels) -> Circuit:
@@ -205,7 +246,6 @@ def to_circuit(two_levels: TwoLevels) -> Circuit:
     twolevel_decomposition output flows straight into a Circuit.
     """
     # TODO: implement.
-    raise NotImplementedError("to_circuit is not implemented yet")
 
 
 def error_up_to_phase(a: np.ndarray, b: np.ndarray) -> float:
@@ -214,7 +254,6 @@ def error_up_to_phase(a: np.ndarray, b: np.ndarray) -> float:
     <b, a> = sum conj(b_ij) a_ij, then compare. ~0 means equal up to global phase.
     """
     # TODO: implement.
-    raise NotImplementedError("error_up_to_phase is not implemented yet")
 
 
 # ---------------------------------------------------------------------------
